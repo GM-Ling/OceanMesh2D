@@ -1,5 +1,5 @@
 function polygon_struct = Read_shapefile( finputname, polygon, bbox, ...
-                                          h0, boubox, plot_on )
+                                          h0, boubox, plot_on, shapefile_3d)
 % Read_shapefile: Reads a shapefile or a NaN-delimited vector
 % containing polygons and/or segments in the the desired region
 % of interest. Classifies the vector data as either a
@@ -23,9 +23,9 @@ function polygon_struct = Read_shapefile( finputname, polygon, bbox, ...
 %% Loop over all the filenames and get the shapefile within bbox
 SG = [];
 if bbox(1,2) > 180 && bbox(1,1) < 180
-    % bbox straddles 180/-180 line
+    % bbox straddles 180/-180 meridian
     loop = 2; minus = 0;
-elseif bbox(1,1) > 180 && bbox(1,1) > 180
+elseif all(bbox(1,:) > 180)
     % beyond 180 in 0 to 360 format
     loop = 1; minus = 1;
 else
@@ -62,7 +62,7 @@ if (size(finputname,1)~=0)
                 S = m_shaperead(fname{1},reshape(bboxt',4,1));
                 % Let's just keep the x-y data
                 D = S.ncst;
-                if isfield(S,'dbf')
+                if isfield(S,'dbf')  || isfield(S,'dbfdata')
                     code = S.dbfdata(:,1);
                     S = cell2struct([D code]',{'points' 'type'},1);
                 else
@@ -174,6 +174,9 @@ for i = 1 : size(tmpC,1)
         % using m_shaperead
         points = tmpC{i,1}(1:end,:) ;
         if size(points,2) == 3
+            points = points(:,1:2);
+        end
+        if shapefile_3d
             % if 3-D shapefile
             height = points(:,3); 
             points = points(:,1:2); 

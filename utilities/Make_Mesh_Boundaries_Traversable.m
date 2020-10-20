@@ -1,4 +1,4 @@
-function obj = Make_Mesh_Boundaries_Traversable( obj, dj_cutoff, nscreen )
+function obj = Make_Mesh_Boundaries_Traversable( obj, dj_cutoff, nscreen, proj )
 %  obj =  Make_Mesh_Boundaries_Traversable(obj,dj_cutoff,nscreen)
 %  A msh object (containing p and t) is  "cleaned" and returned. 
 %  ncscreen ~= 0 will display info to screen
@@ -49,23 +49,32 @@ function obj = Make_Mesh_Boundaries_Traversable( obj, dj_cutoff, nscreen )
 %  along with this program.  If not, see <http://www.gnu.org/licenses/>.  
 
 % Entering the code
-disp('Making mesh boundaries traversable...');  
+disp('Entry: Making mesh boundaries traversable...');  
 % This is to avoid heaps of warnings in the triangulation call which are
 % unneccesary
 warning('off','all')
 
+if nargin < 3
+   % display outputs
+   nscreen = 1;
+end
+if nargin < 4
+   % already projected
+   proj = 1; 
+end
+
+% fix mesh
+obj = fixmeshandcarry(obj);
+
 % Get p and t out of obj
 p = obj.p; t = obj.t;
-
-% Delete disjoint nodes
-[p,t] = fixmesh(p,t);
 
 % Get boundary edges and nodes
 [etbv,vxe] = extdom_edges2( t, p ) ;
 
 % WJP sometimes we may wanna delete some exterior portions even with a valid
 % mesh so allow entry even in this case.
-if numel(etbv) == numel(vxe)
+if dj_cutoff > 0 && numel(etbv) == numel(vxe)
     etbv(end+1,:) = 1; 
 end
 % Loop until all the nodes only have two boundary edges
@@ -74,16 +83,20 @@ end
 while numel(etbv) > numel(vxe)
     
     % Delete elements in the exterior of the mesh
-    t = delete_exterior_elements(p,t,dj_cutoff,nscreen);
+    t = delete_exterior_elements(p,t,dj_cutoff,nscreen,proj);
     
     % Delete disjoint nodes
-    [p,t] = fixmesh(p,t);
+    obj.t = t;
+    obj = fixmeshandcarry(obj);
+    t = obj.t; p = obj.p;
 
     % Delete elements in the interior of the mesh
     t = delete_interior_elements(p,t,nscreen);
      
     % Delete disjoint nodes
-    [p,t] = fixmesh(p,t);
+    obj.t = t;
+    obj = fixmeshandcarry(obj);
+    t = obj.t; p = obj.p;
     
     % Get boundary edges and nodes
     [etbv,vxe] = extdom_edges2( t, p ) ;
@@ -94,11 +107,9 @@ while numel(etbv) > numel(vxe)
     %end
 end
 % Finished cleaning
-disp('ALERT: finished cleaning up mesh..'); 
+disp('Exit: finished making mesh boundaries traversable..'); 
 % Turn warnings back on
 warning('on','all')
-% Put back into the msh object
-obj.p = p; obj.t = t;
 end
 % The sub-functions...
 %% Delete elements outside the main mesh depending on dj_cutoff input
@@ -106,23 +117,31 @@ end
 %    area in km2
 % dj_cutoff < 1
 %    proportion of the total mesh area
-function t = delete_exterior_elements(p,t,dj_cutoff,nscreen)
+function t = delete_exterior_elements(p,t,dj_cutoff,nscreen,proj)
+%
+if dj_cutoff <= 0
+    if nscreen
+        disp('dj_cutoff is zero; do nothing in delete_exterior_elements')
+    end
+    % do nothing
+    return; 
+end
 L = size(t,1); 
 t1 = t; t = [];
-global MAP_PROJECTION
-if isempty(MAP_PROJECTION)
-    % need to project
-    m_proj('Azimuthal Equal-area','lon',[min(p(:,1)),max(p(:,1))],...
-           'lat',[min(p(:,2)),max(p(:,2))]) ;
-    % Do the transformation
-    [X,Y] = m_ll2xy(p(:,1),p(:,2)); 
+if proj
+    % has already been projected so need to convert back to lat-lon
+    [X,Y] = m_xy2ll(p(:,1),p(:,2));  
 else
-    % already projected
+    % not projected so keep the lat-lon;
     X = p(:,1); Y = p(:,2);  
 end
-A = sum(polyarea(X(t1(:,1:3))',Y(t1(:,1:3))'));  An = A;
+% calculate area
+A = sum(polyarea(X(t1)',Y(t1)').*cosd(mean(Y(t1)')));
+%A = sum(polyarea(X(t1(:,1:3))',Y(t1(:,1:3))'));
+An = A;
 if dj_cutoff >= 1
-    Re2 = (6378.137)^2; An = Re2*An;
+    Re2 = 111^2; % Re2 = (6378.137)^2; 
+    An = Re2*An;
     % Absolute area
     while An > dj_cutoff
 
@@ -131,7 +150,7 @@ if dj_cutoff >= 1
 
         % Get new triangulation and its area
         t2 = t1(nflag == 1,:);
-        An = Re2*sum(polyarea(X(t2(:,1:3))',Y(t2(:,1:3))')); 
+        An = Re2*sum(polyarea(X(t2)',Y(t2)').*cosd(mean(Y(t2)'))); 
         
         % If large enough at t2 to the triangulation
         if An > dj_cutoff
@@ -141,7 +160,7 @@ if dj_cutoff >= 1
         % limit criterion.
         t1(nflag == 1,:) = []; 
         % Calculate the remaining area       
-        An = Re2*sum(polyarea(X(t1(:,1:3))',Y(t1(:,1:3))')); 
+        An = Re2*sum(polyarea(X(t1)',Y(t1)').*cosd(mean(Y(t1)'))); 
         
     end
 elseif dj_cutoff > 0
@@ -153,7 +172,7 @@ elseif dj_cutoff > 0
 
         % Get new triangulation and its area
         t2 = t1(nflag == 1,:);
-        An = sum(polyarea(X(t2(:,1:3))',Y(t2(:,1:3))')); 
+        An = sum(polyarea(X(t2)',Y(t2)').*cosd(mean(Y(t2)'))); 
         
         % If large enough at t2 to the triangulation
         if An/A > dj_cutoff
@@ -163,7 +182,7 @@ elseif dj_cutoff > 0
         % limit criterion.
         t1(nflag == 1,:) = []; 
         % Calculate the remaining area       
-        An = sum(polyarea(X(t1(:,1:3))',Y(t1(:,1:3))')); 
+        An = sum(polyarea(X(t1)',Y(t1)').*cosd(mean(Y(t1)'))); 
         
     end
 elseif dj_cutoff < 0

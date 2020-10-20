@@ -1,9 +1,11 @@
 % Example_3_ECGC: Mesh the greater US East Coast and Gulf of Mexico region
 % with a high resolution inset around New York
+
 clearvars; clc;
-addpath(genpath('utilities/'));
-addpath(genpath('datasets/'));
-addpath(genpath('m_map/'));
+
+addpath(genpath('../utilities/'));
+addpath(genpath('../datasets/'));
+addpath(genpath('../m_map/'));
 
 % WJP: 08/02/2019: Updated to demonstrate using non-box 
 % (arbitrary polygon's) bbox's in both outer and inner meshes
@@ -21,7 +23,7 @@ R         = 3; 			        % Number of elements to resolve feature.
   
 %% STEP 2: specify geographical datasets and process the geographical data
 %% to be used later with other OceanMesh classes...
-dem       = 'SRTM15+V2.nc';
+dem       = 'SRTM15+V2.1.nc';
 coastline = 'GSHHS_f_L1';
 gdat1 = geodata('shp',coastline,'dem',dem,'h0',min_el,...
                 'bbox',bbox);
@@ -56,7 +58,7 @@ mshopts = mshopts.build;
 %% Plot and save the msh class object/write to fort.14
 m = mshopts.grd; % get out the msh object
 m = interp(m,{gdat1 gdat2},'mindepth',1); % interpolate bathy to the mesh with minimum depth of 1 m
-m = makens(m,'auto',gdat1);               % make the nodestring boundary conditions
+m = make_bc(m,'auto',gdat1);               % make the nodestring boundary conditions
 plot(m,'bd',1); % plot on native projection with nodestrings
 plot(m,'b',1); % plot bathy on native projection
 save('ECGC_w_NYHR.mat','m'); write(m,'ECGC_w_NYHR');
